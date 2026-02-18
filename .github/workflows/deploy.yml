@@ -1,0 +1,210 @@
+# ============================================================================
+# GitHub Actions Workflow: Build and Push Docker Images to Azure Container Registry
+# ============================================================================
+# 
+# This workflow automatically builds your backend and frontend Docker images
+# and pushes them to Azure Container Registry whenever you push code to main.
+#
+# What this workflow does:
+# 1. Triggers when code is pushed to main branch
+# 2. Checks out your code from GitHub
+# 3. Authenticates with Azure using Service Principal
+# 4. Logs into Azure Container Registry
+# 5. Builds backend Docker image
+# 6. Builds frontend Docker image
+# 7. Tags both images with commit SHA and 'latest'
+# 8. Pushes both images to ACR
+# ============================================================================
+
+# Name of the workflow (appears in GitHub Actions tab)
+name: Build and Push to ACR
+
+# ============================================================================
+# TRIGGERS: When should this workflow run?
+# ============================================================================
+on:
+  # Trigger 1: Automatically run when code is pushed to main branch
+  push:
+    branches: [ main ]
+  
+  # Trigger 2: Allow manual triggering from GitHub Actions tab
+  # This adds a "Run workflow" button in the GitHub UI
+  workflow_dispatch:
+
+# ============================================================================
+# ENVIRONMENT VARIABLES: Reusable values throughout the workflow
+# ============================================================================
+env:
+  # Your Azure Container Registry name
+  ACR_NAME: qrappregistry2026
+  
+  # Image name for backend (will become: qrappregistry2026.azurecr.io/backend)
+  BACKEND_IMAGE: backend
+  
+  # Image name for frontend (will become: qrappregistry2026.azurecr.io/frontend)
+  FRONTEND_IMAGE: frontend
+
+# ============================================================================
+# JOBS: Define the work to be done
+# ============================================================================
+jobs:
+  # Job 1: Build and push Docker images
+  # (You can have multiple jobs, but we only need one)
+  build-and-push:
+    # Human-readable name for this job
+    name: Build and Push Docker Images
+    
+    # Run this job on Ubuntu (GitHub provides this for free)
+    # ubuntu-latest comes with Docker, Git, and Azure CLI pre-installed
+    runs-on: ubuntu-latest
+    
+    # ============================================================================
+    # STEPS: Individual tasks that run sequentially
+    # ============================================================================
+    steps:
+      # ------------------------------------------------------------------------
+      # STEP 1: Checkout Code
+      # ------------------------------------------------------------------------
+      # Downloads your repository code to the GitHub runner
+      # Like running: git clone <your-repo>
+      - name: Checkout code
+        uses: actions/checkout@v3
+        # uses: Runs a pre-built action from GitHub Marketplace
+        # actions/checkout@v3: Official GitHub action to download code
+      
+      # ------------------------------------------------------------------------
+      # STEP 2: Login to Azure
+      # ------------------------------------------------------------------------
+      # Authenticates with Azure using the Service Principal you created
+      # This allows the workflow to access Azure resources
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          # Use the AZURE_CREDENTIALS secret (Service Principal JSON)
+          # ${{ secrets.NAME }}: Accesses GitHub Secrets securely
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      # ------------------------------------------------------------------------
+      # STEP 3: Login to Azure Container Registry
+      # ------------------------------------------------------------------------
+      # Logs Docker into your ACR so we can push images
+      # Like running: docker login qrappregistry2026.azurecr.io
+      - name: Login to ACR
+        uses: docker/login-action@v2
+        with:
+          # ACR login server (e.g., qrappregistry2026.azurecr.io)
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          
+          # ACR username (usually same as registry name)
+          username: ${{ secrets.ACR_USERNAME }}
+          
+          # ACR password (from Access Keys in Azure Portal)
+          password: ${{ secrets.ACR_PASSWORD }}
+      
+      # ------------------------------------------------------------------------
+      # STEP 4: Build and Push Backend Image
+      # ------------------------------------------------------------------------
+      # Builds the backend Docker image and pushes it to ACR
+      - name: Build and push backend image
+        run: |
+          # Build the backend image
+          # -t: Tag the image
+          # ${{ env.ACR_NAME }}: Uses ACR_NAME from environment variables
+          # ${{ github.sha }}: Git commit hash (unique for each commit)
+          # ./api: Path to backend Dockerfile
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:${{ github.sha }} ./api
+          
+          # Tag the same image as 'latest'
+          # This creates another tag pointing to the same image
+          # No additional space used - just another name for the same image
+          docker tag ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:${{ github.sha }} ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
+          
+          # Push the image with commit SHA tag
+          # Example: qrappregistry2026.azurecr.io/backend:abc123def456
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          
+          # Push the image with 'latest' tag
+          # Example: qrappregistry2026.azurecr.io/backend:latest
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest
+      
+      # ------------------------------------------------------------------------
+      # STEP 5: Build and Push Frontend Image
+      # ------------------------------------------------------------------------
+      # Builds the frontend Docker image and pushes it to ACR
+      # Same process as backend, but for frontend
+      - name: Build and push frontend image
+        run: |
+          # Build the frontend image
+          # ./front-end-nextjs: Path to frontend Dockerfile
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} ./front-end-nextjs
+          
+          # Tag the same image as 'latest'
+          docker tag ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:${{ github.sha }} ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
+          
+          # Push the image with commit SHA tag
+          # Example: qrappregistry2026.azurecr.io/frontend:abc123def456
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          
+          # Push the image with 'latest' tag
+          # Example: qrappregistry2026.azurecr.io/frontend:latest
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest
+      
+      # ------------------------------------------------------------------------
+      # STEP 6: Output Success Message
+      # ------------------------------------------------------------------------
+      # Prints the image tags to the workflow log
+      # Confirms what was built and pushed
+      - name: Image tags
+        run: |
+          echo "============================================"
+          echo "✅ Images pushed successfully to ACR!"
+          echo "============================================"
+          echo ""
+          echo "Backend Image:"
+          echo "  - ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          echo "  - ${{ env.ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE }}:latest"
+          echo ""
+          echo "Frontend Image:"
+          echo "  - ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+          echo "  - ${{ env.ACR_NAME }}.azurecr.io/${{ env.FRONTEND_IMAGE }}:latest"
+          echo ""
+          echo "============================================"
+          echo "View images in Azure Portal:"
+          echo "Container registries → ${{ env.ACR_NAME }} → Repositories"
+          echo "============================================"
+
+# ============================================================================
+# END OF WORKFLOW
+# ============================================================================
+#
+# WHAT HAPPENS AFTER THIS WORKFLOW RUNS:
+#
+# 1. In Azure Container Registry, you'll have:
+#    - backend:abc123def456 (specific version)
+#    - backend:latest (always points to newest)
+#    - frontend:abc123def456 (specific version)
+#    - frontend:latest (always points to newest)
+#
+# 2. You can pull these images with:
+#    docker pull qrappregistry2026.azurecr.io/backend:latest
+#    docker pull qrappregistry2026.azurecr.io/frontend:latest
+#
+# 3. You can deploy them to:
+#    - Azure Container Instances
+#    - Azure App Service
+#    - Azure Kubernetes Service
+#    - Any Docker host
+#
+# NEXT STEPS:
+# 1. Commit this file to your repository
+# 2. Push to GitHub
+# 3. Watch the workflow run in the Actions tab
+# 4. Check Azure Portal for your images
+#
+# TROUBLESHOOTING:
+# - If workflow fails, check the logs in GitHub Actions tab
+# - Verify all 5 secrets are set correctly in repository settings
+# - Ensure Dockerfiles exist in ./api and ./front-end-nextjs
+# - Check Azure Portal for ACR access permissions
+#
+# ============================================================================

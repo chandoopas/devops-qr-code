@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  backend:
+    build:
+      context: ./api              # Where to find Dockerfile
+      dockerfile: Dockerfile       # Dockerfile name
+    container_name: qr-backend    # Name of the container
+    ports:
+      - "8000:8000"               # Host:Container port mapping
+    env_file:
+      - ./api/.env                # Load environment variables
+    networks:
+      - qr-network                # Connect to this network
+    restart: unless-stopped       # Restart policy
+  frontend:
+    build:
+      context: ./front-end-nextjs
+      dockerfile: Dockerfile
+    container_name: qr-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    networks:
+      - qr-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+networks:
+  qr-network:
+    driver: bridge
