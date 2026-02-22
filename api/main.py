@@ -7,6 +7,7 @@ import os
 from io import BytesIO
 from dotenv import load_dotenv
 import uuid
+import re
 
 # Load environment variables
 load_dotenv()
@@ -16,7 +17,7 @@ app = FastAPI()
 # CORS middleware - allows frontend to call backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=["*"],  # Allow all origins for Kubernetes (was only localhost)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,7 +30,13 @@ class URLRequest(BaseModel):
 # Azure Blob Storage configuration
 AZURE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
 AZURE_CONTAINER_NAME = os.getenv('AZURE_CONTAINER_NAME', 'qr-codes')
-AZURE_STORAGE_ACCOUNT_NAME = os.getenv('AZURE_STORAGE_ACCOUNT_NAME')
+
+# ✅ FIX: Extract account name from connection string
+if AZURE_CONNECTION_STRING:
+    account_name_match = re.search(r'AccountName=([^;]+)', AZURE_CONNECTION_STRING)
+    AZURE_STORAGE_ACCOUNT_NAME = account_name_match.group(1) if account_name_match else None
+else:
+    AZURE_STORAGE_ACCOUNT_NAME = None
 
 # Initialize Azure Blob Service Client
 try:
@@ -56,7 +63,8 @@ def health_check():
         return {
             "status": "healthy",
             "azure_storage": "connected",
-            "container": AZURE_CONTAINER_NAME
+            "container": AZURE_CONTAINER_NAME,
+            "account_name": AZURE_STORAGE_ACCOUNT_NAME
         }
     except Exception as e:
         return {
