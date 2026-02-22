@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 
 export default function Home() {
   const [url, setUrl] = useState('')
@@ -25,12 +24,14 @@ export default function Home() {
     try {
       console.log('Generating QR code for:', url)
       
-      const response = await fetch('http://localhost:8000/generate', {
+      // Call Next.js API route (which then calls backend)
+      // This way the API call happens server-side where http://backend:8000 works
+      const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ url: url })
+        body: JSON.stringify({ url })  // ✅ FIXED: was 'inputUrl', now 'url'
       })
 
       if (!response.ok) {
@@ -43,7 +44,7 @@ export default function Home() {
       setQrCodeUrl(data.qr_code_url)
     } catch (err) {
       console.error('Error generating QR code:', err)
-      setError('Failed to generate QR code. Make sure the backend is running on http://localhost:8000')
+      setError('Failed to generate QR code. Please try again.')
     } finally {
       setLoading(false)
     }
