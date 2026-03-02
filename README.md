@@ -5,7 +5,7 @@ Full-stack QR code generator deployed on Azure Kubernetes Service with automated
 
 ## 📊 Architecture
 High-Level Architecture:
-![[High-Level Architecture.drawio.svg]]
+![High-Level Architecture](Screenshots📷/High-Level Architecture.drawio.svg)
 ## 🛠️ Technologies Used
 **Frontend:** Next.js, React, Tailwind CSS 
 **Backend:** FastAPI, Python, qrcode, azure-storage-blob 
@@ -43,10 +43,14 @@ Implemented cost optimization:
 - Resource limits and quotas 
 - Auto-scaling disabled for predictable costs
 ## 📸 Screenshots
-- Application UI ![[Application 1.1.png]]
-- Grafana dashboards ![[Kubernetes Cluster Overview Dashboard.png]]
-![[Node Exporter.png]]
-![[Your Application Pods Dashboard.png]]- GitHub Actions pipeline 
-![[CI:CD Workflow.png]]
+- Application UI 
+![Application 1.1.png](Screenshots📷/Application 1.1.png)
+- Grafana dashboards 
+![Kubernetes Cluster Overview Dashboard](Screenshots📷/Kubernetes Cluster Overview Dashboard.png)
+![Node Exporter](Screenshots📷/Node Exporter.png)
+![Your Application Pods Dashboard](Screenshots📷/Your Application Pods Dashboard.png)
+- GitHub Actions pipeline 
+![CI:CD Workflow](Screenshots📷/CI:CD Workflow.png)
 - Azure Portal resources
-![[Container registires .png]]![[AKS.png]]
+![Container registiry](Screenshots📷/Container registires .png)
+![aks](Screenshots📷/AKS.png)
