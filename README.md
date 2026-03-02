@@ -1,51 +1,52 @@
-# devops-qr-code
+## 🎯 Project Overview
 
-This is the sample application for the DevOps Capstone Project.
-It generates QR Codes for the provided URL, the front-end is in NextJS and the API is written in Python using FastAPI.
+Full-stack QR code generator deployed on Azure Kubernetes Service with automated CI/CD, Infrastructure as Code, and monitoring.
+**Live Demo:** http://20.22.157.60 (if still running)
 
-## Application
+## 📊 Architecture
+High-Level Architecture:
+![[High-Level Architecture.drawio.svg]]
+## 🛠️ Technologies Used
+**Frontend:** Next.js, React, Tailwind CSS 
+**Backend:** FastAPI, Python, qrcode, azure-storage-blob 
+**Infrastructure:** Azure Kubernetes Service (AKS), Terraform 
+**CI/CD:** GitHub Actions 
+**Monitoring:** Prometheus, Grafana 
+**Container Registry:** Azure Container Registry 
+**Storage:** Azure Blob Storage
 
-**Front-End** - A web application where users can submit URLs.
-
-**API**: API that receives URLs and generates QR codes. The API stores the QR codes in cloud storage(AWS S3 Bucket).
-
-## Running locally
-
-### API
-
-The API code exists in the `api` directory. You can run the API server locally:
-
-- Clone this repo
-- Make sure you are in the `api` directory
-- Create a virtualenv by typing in the following command: `python -m venv .venv`
-- Install the required packages: `pip install -r requirements.txt`
-- Create a `.env` file, and add you AWS Access and Secret key, check  `.env.example`
-- Also, change the BUCKET_NAME to your S3 bucket name in `main.py`
-- Run the API server: `uvicorn main:app --reload`
-- Your API Server should be running on port `http://localhost:8000`
-
-### Front-end
-
-The front-end code exits in the `front-end-nextjs` directory. You can run the front-end server locally:
-
-- Clone this repo
-- Make sure you are in the `front-end-nextjs` directory
-- Install the dependencies: `npm install`
-- Run the NextJS Server: `npm run dev`
-- Your Front-end Server should be running on `http://localhost:3000`
-
-
-## Goal
-
-The goal is to get hands-on with DevOps practices like Containerization, CICD and monitoring.
-
-Look at the capstone project for more detials.
-
-## Author
-
-[Rishab Kumar](https://github.com/rishabkumar7)
-
-## License
-
-[MIT](./LICENSE)
-# CI/CD is working! 🎉
+## ✨ Key Features
+- ✅ Automated CI/CD pipeline (build, test, deploy) 
+- ✅ Infrastructure as Code with Terraform 
+- ✅ Kubernetes orchestration with high availability 
+- ✅ Real-time monitoring with Prometheus & Grafana 
+- ✅ Microservices architecture 
+- ✅ Cloud-native design 
+- ✅ Cost-optimized ($10/month with destroy strategy)
+## 🚀 What I Learned
+- Containerization with Docker 
+- Kubernetes orchestration 
+- Azure cloud services 
+- CI/CD automation 
+- Infrastructure as Code 
+- Monitoring and observability 
+- Cost optimization strategies
+## 📈 Monitoring
+20+ pre-built dashboards showing: 
+- Real-time CPU/memory usage 
+- Request rates and latencies 
+- Pod health status 
+- Historical trends
+## 💰 Cost Management
+Implemented cost optimization: 
+- Terraform destroy strategy: ~$10/month 
+- Resource limits and quotas 
+- Auto-scaling disabled for predictable costs
+## 📸 Screenshots
+- Application UI ![[Application 1.1.png]]
+- Grafana dashboards ![[Kubernetes Cluster Overview Dashboard.png]]
+![[Node Exporter.png]]
+![[Your Application Pods Dashboard.png]]- GitHub Actions pipeline 
+![[CI:CD Workflow.png]]
+- Azure Portal resources
+![[Container registires .png]]![[AKS.png]]

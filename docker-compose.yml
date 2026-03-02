@@ -14,10 +14,10 @@ services:
     restart: unless-stopped       # Restart policy
   frontend:
     build:
-      context: ./front-end-nextjs
-      dockerfile: Dockerfile
-    container_name: qr-frontend
-    ports:
+      context: ./front-end-nextjs #where to find Dockerfile
+      dockerfile: Dockerfile     #Dockerfile name
+    container_name: qr-frontend  #Name of the container
+    ports:  # Host:Container port mapping
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://backend:8000

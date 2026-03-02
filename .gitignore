@@ -1,0 +1,4 @@
+.venv/
+*.tfstate*
+.DS_Store
+.obsidian/
