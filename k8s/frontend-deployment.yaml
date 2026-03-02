@@ -1,0 +1,349 @@
+# ============================================================================
+# frontend-deployment.yaml - Frontend Deployment Configuration
+# ============================================================================
+#
+# This file tells Kubernetes how to run your Next.js frontend application.
+# It creates a Deployment resource that manages frontend pods.
+#
+# What this file does:
+#   - Pulls frontend image from Azure Container Registry
+#   - Runs 2 replicas (pods) for high availability
+#   - Sets resource limits (CPU and memory)
+#   - Configures environment variable (backend URL)
+#   - Ensures pods restart if they crash
+#
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# API Version and Kind
+# ----------------------------------------------------------------------------
+
+# apiVersion: Which version of the Kubernetes API to use
+apiVersion: apps/v1
+
+# kind: What type of resource this is
+# Deployment = manages a set of identical pods
+kind: Deployment
+
+# ----------------------------------------------------------------------------
+# Metadata
+# ----------------------------------------------------------------------------
+
+metadata:
+  # name: Unique name for this Deployment
+  name: frontend
+  
+  # labels: For organizing resources
+  labels:
+    app: frontend           # This is a frontend application
+    tier: presentation      # This is the presentation/UI tier
+    version: v1             # Version 1
+    environment: production # Production environment
+
+# ----------------------------------------------------------------------------
+# Spec (Specification)
+# ----------------------------------------------------------------------------
+
+spec:
+  # replicas: How many pods to run
+  # 2 replicas for high availability and load balancing
+  # Frontend needs more capacity than backend typically
+  # Can scale up to 3-5 if you get more traffic
+  replicas: 2
+  
+  # selector: How to identify pods belonging to this Deployment
+  selector:
+    matchLabels:
+      app: frontend
+      tier: presentation
+  
+  # template: Blueprint for creating pods
+  template:
+    # metadata for each pod
+    metadata:
+      # labels: MUST match selector above
+      labels:
+        app: frontend
+        tier: presentation
+        version: v1
+    
+    # spec: How to configure each pod
+    spec:
+      # containers: List of containers in the pod
+      containers:
+      - name: frontend
+        # image: Docker image from ACR
+        # Your CI/CD pipeline pushes images here
+        # qrappregistry2026.azurecr.io = Your ACR
+        # frontend = Repository name
+        # latest = Tag (always use latest)
+        image: qrappregistry2026.azurecr.io/frontend:latest
+        
+        # imagePullPolicy: When to pull image
+        # Always = Pull every time (ensures you get latest build)
+        # Good for :latest tag
+        imagePullPolicy: Always
+        
+        # ports: Container exposes these ports
+        ports:
+        - name: http
+          # containerPort: Port Next.js listens on
+          # Next.js default is 3000
+          # Must match what's in your Dockerfile (PORT 3000)
+          containerPort: 3000
+          protocol: TCP
+        
+        # env: Environment variables for the container
+        # These configure the frontend app at runtime
+        env:
+        # NEXT_PUBLIC_API_URL: Backend URL
+        # CRITICAL: This tells frontend where to find backend
+        # 
+        # Value explanation:
+        #   http://backend:8000
+        #   - "backend" is the Service name (from backend-service.yaml)
+        #   - Kubernetes DNS automatically resolves "backend" to Service IP
+        #   - ":8000" is the backend Service port
+        # 
+        # This works because:
+        #   1. Backend Service creates DNS entry "backend"
+        #   2. Frontend pod can resolve "backend" via Kubernetes DNS
+        #   3. Traffic routed through backend Service to backend pods
+        # 
+        # Why "http://backend:8000" and not an IP?
+        #   - IPs change as pods are created/destroyed
+        #   - Service name stays constant
+        #   - DNS handles the routing automatically
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://backend:8000"
+        
+        # Optional: Add more environment variables if needed
+        # Example:
+        # - name: NODE_ENV
+        #   value: "production"
+        # - name: LOG_LEVEL
+        #   value: "info"
+        
+        # resources: CPU and memory limits
+        # Frontend typically needs more resources than backend
+        # Next.js can be memory-intensive during SSR
+        resources:
+          # requests: Minimum guaranteed resources
+          requests:
+            # memory: Frontend needs more RAM than backend
+            # 512Mi = 512 Mebibytes (~537 MB)
+            # Next.js + Node.js requires decent memory
+            memory: "512Mi"
+            
+            # cpu: CPU needed
+            # 250m = 0.25 CPU cores
+            # Frontend is not very CPU intensive
+            cpu: "250m"
+          
+          # limits: Maximum allowed resources
+          limits:
+            # memory: Maximum RAM
+            # 1Gi = 1 Gibibyte (~1.07 GB)
+            # Gives headroom for Next.js to operate
+            # Pod killed if it exceeds this (OOMKilled)
+            memory: "1Gi"
+            
+            # cpu: Maximum CPU
+            # 500m = 0.5 CPU cores
+            # Pod throttled if it tries to use more
+            cpu: "500m"
+        
+        # livenessProbe: Is the container alive?
+        # If this fails, Kubernetes restarts the container
+        livenessProbe:
+          # httpGet: Check by making HTTP request
+          httpGet:
+            # path: Endpoint to check
+            # Next.js root path (/)
+            # Returns the homepage (proves app is running)
+            path: /
+            port: 3000
+          
+          # initialDelaySeconds: Wait before first check
+          # Next.js needs time to start up and build
+          # 30 seconds is usually sufficient
+          initialDelaySeconds: 30
+          
+          # periodSeconds: How often to check
+          # Check every 10 seconds
+          periodSeconds: 10
+          
+          # timeoutSeconds: How long to wait for response
+          # 5 seconds should be enough
+          timeoutSeconds: 5
+          
+          # failureThreshold: Failures before restart
+          # 3 consecutive failures → restart
+          failureThreshold: 3
+        
+        # readinessProbe: Is the container ready for traffic?
+        # If this fails, pod removed from Service (no traffic)
+        readinessProbe:
+          httpGet:
+            # path: Same as liveness
+            path: /
+            port: 3000
+          
+          # initialDelaySeconds: Can be shorter than liveness
+          # 10 seconds for frontend to be ready
+          initialDelaySeconds: 10
+          
+          # periodSeconds: Check every 5 seconds
+          periodSeconds: 5
+          
+          # timeoutSeconds: 3 seconds to respond
+          timeoutSeconds: 3
+          
+          # failureThreshold: 3 failures → not ready
+          failureThreshold: 3
+
+# ============================================================================
+# END OF frontend-deployment.yaml
+# ============================================================================
+#
+# WHAT THIS FILE CREATES:
+#
+# 1. Deployment resource named "frontend"
+#    - Manages 2 frontend pods
+#    - Ensures 2 pods always running
+#    - Automatically restarts crashed pods
+#
+# 2. Each pod contains:
+#    - 1 container running Next.js
+#    - Image from ACR: qrappregistry2026.azurecr.io/frontend:latest
+#    - Listens on port 3000
+#    - Knows backend is at http://backend:8000
+#    - Resource limits: 1Gi memory, 500m CPU
+#    - Health checks enabled
+#
+# HOW TO USE THIS FILE:
+#
+# 1. Apply to Kubernetes:
+#    kubectl apply -f frontend-deployment.yaml
+#
+# 2. Verify pods are created:
+#    kubectl get pods -l app=frontend
+#
+# 3. Check pod logs:
+#    kubectl logs -l app=frontend
+#
+# 4. Describe pod:
+#    kubectl describe pod <pod-name>
+#
+# EXPECTED RESULT:
+#
+#   kubectl get pods
+#   NAME                        READY   STATUS    RESTARTS   AGE
+#   frontend-6c8b9f7d5e-abc12   1/1     Running   0          2m
+#   frontend-6c8b9f7d5e-xyz34   1/1     Running   0          2m
+#
+# STATUS should be "Running" and READY should be "1/1"
+#
+# HOW FRONTEND CONNECTS TO BACKEND:
+#
+# 1. Frontend pod starts with env var:
+#    NEXT_PUBLIC_API_URL=http://backend:8000
+#
+# 2. Your Next.js code (page.js) uses this:
+#    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+#    fetch(`${API_URL}/generate`, ...)
+#
+# 3. When user clicks "Generate QR Code":
+#    a. Browser makes request to frontend
+#    b. Frontend makes request to http://backend:8000/generate
+#    c. Kubernetes DNS resolves "backend" to backend Service
+#    d. Service routes to one of the backend pods
+#    e. Backend generates QR code
+#    f. Backend returns response
+#    g. Frontend displays to user
+#
+# RESOURCE USAGE:
+#
+# 2 frontend pods × 1Gi memory × 500m CPU:
+#   - Uses about 2Gi memory and 1 CPU total
+#   - On Standard_B2s node (4Gi RAM, 2 vCPU):
+#     - Backend: 1Gi RAM, 1 CPU
+#     - Frontend: 2Gi RAM, 1 CPU
+#     - Total: 3Gi RAM, 2 CPU (75% of node)
+#   - Leaves ~1Gi RAM for system pods
+#
+# NODE CAPACITY CHECK:
+#
+# Standard_B2s has:
+#   - 4Gi RAM total
+#   - ~2.5Gi allocatable (after system overhead)
+#   - 2 vCPU total
+#   - ~1.9 allocatable (after system overhead)
+#
+# Your workload:
+#   - Backend: 2 pods × 512Mi = 1Gi RAM
+#   - Frontend: 2 pods × 1Gi = 2Gi RAM
+#   - Total: 3Gi RAM
+#
+# This fits comfortably! ✅
+#
+# If you need to reduce resources:
+#   - Frontend: 768Mi instead of 1Gi
+#   - Backend: 384Mi instead of 512Mi
+#   - Or run 1 replica of each instead of 2
+#
+# TROUBLESHOOTING:
+#
+# Issue: ImagePullBackOff
+#   Cause: Can't pull image from ACR
+#   Fix: Verify ACR integration
+#   kubectl describe pod <pod-name>
+#   Check Events section for errors
+#
+# Issue: CrashLoopBackOff
+#   Cause: Container keeps crashing
+#   Fix: Check logs
+#   kubectl logs <pod-name>
+#   Look for startup errors
+#
+# Issue: OOMKilled (Out of Memory)
+#   Cause: Pod exceeded memory limit
+#   Fix: Increase memory limit
+#   Change limits.memory to "1.5Gi" or "2Gi"
+#
+# Issue: Pending
+#   Cause: Can't schedule (not enough resources)
+#   Fix: Check node capacity
+#   kubectl describe node
+#   Look at Allocated resources section
+#   May need to reduce resource requests
+#
+# VERIFICATION:
+#
+# 1. Pods running:
+#    kubectl get pods -l app=frontend
+#
+# 2. Check environment variable is set:
+#    kubectl exec -it <frontend-pod-name> -- env | grep API_URL
+#    Should show: NEXT_PUBLIC_API_URL=http://backend:8000
+#
+# 3. Test frontend can reach backend:
+#    kubectl exec -it <frontend-pod-name> -- curl http://backend:8000
+#    Should return backend response
+#
+# 4. Check logs for startup messages:
+#    kubectl logs <frontend-pod-name>
+#    Should see Next.js startup messages
+#
+# SCALING:
+#
+# To scale up (more pods):
+#   kubectl scale deployment frontend --replicas=3
+#
+# To scale down:
+#   kubectl scale deployment frontend --replicas=1
+#
+# Or edit this file and change replicas: 3
+# Then: kubectl apply -f frontend-deployment.yaml
+#
+# ============================================================================

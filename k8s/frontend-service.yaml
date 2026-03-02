@@ -1,0 +1,389 @@
+# ============================================================================
+# frontend-service.yaml - Frontend Service Configuration
+# ============================================================================
+#
+# This file creates a Service for the frontend pods.
+# This is a LoadBalancer Service - it gets a PUBLIC IP from Azure!
+#
+# What this file does:
+#   - Creates public-facing endpoint for frontend
+#   - Gets public IP address from Azure
+#   - Load balances requests across frontend pods
+#   - Makes your application accessible from the internet
+#
+# This is the SERVICE that users will access!
+# When this is created, Azure assigns a public IP address.
+# Users can visit: http://[public-ip] to access your QR code generator!
+#
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# API Version and Kind
+# ----------------------------------------------------------------------------
+
+# apiVersion: v1 (core API for Services)
+apiVersion: v1
+
+# kind: Service
+kind: Service
+
+# ----------------------------------------------------------------------------
+# Metadata
+# ----------------------------------------------------------------------------
+
+metadata:
+  # name: Name of the Service
+  # This is what you'll use to reference it
+  name: frontend
+  
+  # labels: For organizing
+  labels:
+    app: frontend
+    tier: presentation
+    version: v1
+
+# ----------------------------------------------------------------------------
+# Spec (Specification)
+# ----------------------------------------------------------------------------
+
+spec:
+  # type: What kind of Service
+  # LoadBalancer = Public-facing service
+  # 
+  # IMPORTANT: This is different from backend!
+  #   - Backend: ClusterIP (internal only)
+  #   - Frontend: LoadBalancer (public IP)
+  # 
+  # What LoadBalancer does:
+  #   1. Requests Azure to create public IP
+  #   2. Azure creates public IP address
+  #   3. Azure creates load balancer
+  #   4. Load balancer routes traffic to your pods
+  #   5. You get a public IP you can visit in browser
+  # 
+  # Cost: ~$0.025/hour (~$18/month for the public IP + load balancer)
+  # This is on top of the cluster cost
+  # 
+  # Alternative types:
+  #   - ClusterIP: Internal only (like backend)
+  #   - NodePort: Exposes on node IP (not recommended)
+  #   - ExternalName: Maps to external DNS
+  type: LoadBalancer
+  
+  # selector: Which pods this Service routes to
+  # Must match the labels in frontend-deployment.yaml
+  # Service will route to ALL pods with these labels
+  selector:
+    app: frontend
+    tier: presentation
+  
+  # ports: Port configuration
+  ports:
+  - name: http
+    # protocol: TCP for HTTP
+    protocol: TCP
+    
+    # port: The port the Service listens on (externally)
+    # This is what users connect to
+    # Standard HTTP port is 80
+    # Users will access: http://[public-ip]:80
+    # Or just: http://[public-ip] (browser defaults to 80)
+    port: 80
+    
+    # targetPort: Port on the pod containers
+    # Next.js listens on 3000
+    # Must match containerPort in frontend-deployment.yaml
+    # 
+    # This means:
+    #   - User accesses: http://[public-ip]:80
+    #   - Service forwards to: pod:3000
+    #   - User doesn't need to type :3000 (cleaner URL)
+    # 
+    # Port mapping: 80 (external) → 3000 (internal)
+    targetPort: 3000
+  
+  # sessionAffinity: How to handle repeat requests
+  # None = Load balance every request (default)
+  # ClientIP = Same client goes to same pod (sticky sessions)
+  # 
+  # For stateless frontend, use "None"
+  sessionAffinity: None
+  
+  # externalTrafficPolicy: How to handle external traffic
+  # Cluster = Route through cluster network (default)
+  #   - Traffic can be routed to any node
+  #   - Source IP is masqueraded (changed)
+  #   - Better load distribution
+  # 
+  # Local = Only route to pods on the same node
+  #   - Preserves source IP
+  #   - Better performance (no extra hop)
+  #   - Less even load distribution
+  # 
+  # For most cases, "Cluster" is fine
+  # Use "Local" if you need to see client's real IP address
+  # externalTrafficPolicy: Cluster
+
+# ============================================================================
+# END OF frontend-service.yaml
+# ============================================================================
+#
+# WHAT THIS FILE CREATES:
+#
+# 1. Service resource named "frontend"
+#    - Type: LoadBalancer (public IP)
+#    - Listens on port 80 (standard HTTP)
+#    - Routes to frontend pods on port 3000
+#
+# 2. Azure Load Balancer:
+#    - Public IP address assigned
+#    - Routes traffic to Kubernetes nodes
+#    - Nodes route to frontend pods
+#
+# 3. DNS (optional):
+#    - You can point a domain name to the public IP
+#    - Example: qr-generator.yourdomain.com → [public-ip]
+#
+# HOW TO USE THIS FILE:
+#
+# 1. Apply to Kubernetes:
+#    kubectl apply -f frontend-service.yaml
+#
+# 2. Wait for public IP (takes 1-2 minutes):
+#    kubectl get service frontend --watch
+#
+# 3. Get the public IP:
+#    kubectl get service frontend
+#
+# 4. Access in browser:
+#    http://[EXTERNAL-IP]
+#
+# EXPECTED RESULT:
+#
+#   kubectl get service frontend
+#   NAME       TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)        AGE
+#   frontend   LoadBalancer   10.0.234.56    20.62.123.45    80:30123/TCP   2m
+#
+# EXTERNAL-IP: This is your public IP! ← THIS IS IMPORTANT!
+# PORT(S): 80:30123/TCP
+#   - 80 = External port (what users access)
+#   - 30123 = NodePort (internal, auto-assigned)
+#   - TCP = Protocol
+#
+# INITIAL STATE:
+#
+# When you first apply, you'll see:
+#   EXTERNAL-IP   <pending>
+#
+# This means Azure is provisioning the load balancer.
+# Wait 1-2 minutes, then check again.
+#
+# GETTING THE PUBLIC IP:
+#
+# Method 1: kubectl get service
+#   kubectl get service frontend
+#   Look at EXTERNAL-IP column
+#
+# Method 2: kubectl describe
+#   kubectl describe service frontend
+#   Look for "LoadBalancer Ingress" field
+#
+# Method 3: Watch for IP to be assigned
+#   kubectl get service frontend --watch
+#   Wait until EXTERNAL-IP shows an IP address
+#   Press Ctrl+C to stop watching
+#
+# Method 4: Get just the IP
+#   kubectl get service frontend -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+#
+# HOW TRAFFIC FLOWS:
+#
+# User Access Flow:
+#
+# 1. User types in browser:
+#    http://20.62.123.45
+#
+# 2. Request goes to Azure Load Balancer
+#    (Public IP: 20.62.123.45)
+#    ↓
+# 3. Load Balancer routes to Kubernetes node
+#    (Your single node in AKS)
+#    ↓
+# 4. Node routes to frontend Service
+#    (ClusterIP: 10.0.234.56:80)
+#    ↓
+# 5. Service routes to one of the frontend pods
+#    (Pod 1: 10.244.0.5:3000 OR Pod 2: 10.244.0.6:3000)
+#    ↓
+# 6. Pod serves the Next.js application
+#    (HTML, CSS, JS sent to browser)
+#    ↓
+# 7. User sees QR code generator!
+#
+# When user clicks "Generate QR Code":
+#
+# 1. Browser makes API call
+#    (JavaScript fetch to backend)
+#    ↓
+# 2. Frontend code calls backend:
+#    fetch('http://backend:8000/generate', ...)
+#    ↓
+# 3. Request goes to backend Service
+#    ↓
+# 4. Backend Service routes to backend pod
+#    ↓
+# 5. Backend generates QR code
+#    ↓
+# 6. Backend uploads to Azure Blob Storage
+#    ↓
+# 7. Backend returns URL
+#    ↓
+# 8. Frontend displays QR code
+#
+# TESTING:
+#
+# 1. Get the public IP:
+#    kubectl get service frontend
+#
+# 2. Open in browser:
+#    http://[EXTERNAL-IP]
+#
+# 3. You should see:
+#    - QR Code Generator UI
+#    - Input field for URL
+#    - Generate button
+#
+# 4. Test QR generation:
+#    - Enter: https://www.google.com
+#    - Click "Generate QR Code"
+#    - Should see QR code appear
+#    - QR code should be saved to Azure Blob Storage
+#
+# TROUBLESHOOTING:
+#
+# Issue: EXTERNAL-IP stuck on <pending>
+#   Cause 1: Azure is still provisioning (wait 2-5 minutes)
+#   Cause 2: Azure subscription issue (quota, permissions)
+#   Cause 3: Region doesn't support LoadBalancer
+#   Fix: Check Azure Portal → Load Balancers
+#        Check kubectl describe service frontend (Events section)
+#
+# Issue: Can't access IP in browser
+#   Cause 1: Service not ready yet
+#   Fix: kubectl get pods -l app=frontend (check pods are Running)
+#   
+#   Cause 2: Firewall blocking
+#   Fix: Check Azure Network Security Group rules
+#   
+#   Cause 3: Wrong IP or port
+#   Fix: Use http://[IP]:80 or just http://[IP]
+#
+# Issue: Connection times out
+#   Cause: Pods not ready
+#   Fix: kubectl get pods -l app=frontend
+#        Check READY column is 1/1
+#        Check logs: kubectl logs -l app=frontend
+#
+# Issue: 502 Bad Gateway
+#   Cause: Frontend pods are crashing
+#   Fix: Check pod logs
+#        kubectl logs -l app=frontend
+#        kubectl describe pod <frontend-pod-name>
+#
+# COST:
+#
+# LoadBalancer Service costs:
+#   - Public IP: ~$0.005/hour (~$3.60/month)
+#   - Load Balancer: ~$0.025/hour (~$18/month)
+#   - Total: ~$21.60/month
+#
+# This is in addition to:
+#   - Kubernetes node: ~$30/month (Standard_B2s)
+#   - ACR: ~$5/month
+#   - Storage: ~$0.50/month
+#
+# Total infrastructure: ~$57/month (if running 24/7)
+#
+# With destroy strategy (4 hours/day):
+#   - Kubernetes: ~$4/month
+#   - ACR: ~$5/month
+#   - Storage: ~$0.50/month
+#   - Total: ~$9.50/month ✅
+#
+# SECURITY CONSIDERATIONS:
+#
+# Public IP means:
+#   ✅ Anyone can access your app
+#   ⚠️ Exposed to internet
+#   ⚠️ Potential for attacks
+#
+# Recommendations:
+#   - Add authentication if needed
+#   - Use HTTPS (set up Ingress with TLS)
+#   - Rate limiting
+#   - WAF (Web Application Firewall)
+#   - Monitor access logs
+#
+# For production:
+#   - Use Ingress instead of LoadBalancer
+#   - Set up TLS/SSL certificates
+#   - Use domain name (not bare IP)
+#   - Add WAF
+#   - Implement rate limiting
+#
+# ADVANCED: Using a Domain Name
+#
+# Once you have the public IP, you can:
+#
+# 1. Buy a domain (GoDaddy, Namecheap, etc.)
+# 2. Add A record:
+#    qr-generator.yourdomain.com → [public-ip]
+# 3. Wait for DNS propagation (5-60 minutes)
+# 4. Access: http://qr-generator.yourdomain.com
+#
+# ADVANCED: Adding HTTPS
+#
+# For HTTPS, you need:
+# 1. Ingress Controller (nginx-ingress)
+# 2. Cert-Manager (for SSL certificates)
+# 3. Let's Encrypt (free SSL)
+#
+# This is beyond the scope of this project,
+# but it's the next step for production!
+#
+# VERIFICATION COMMANDS:
+#
+# 1. Check Service:
+#    kubectl get svc frontend
+#
+# 2. Watch for IP assignment:
+#    kubectl get svc frontend --watch
+#
+# 3. Describe Service:
+#    kubectl describe svc frontend
+#
+# 4. Check endpoints:
+#    kubectl get endpoints frontend
+#    Should show 2 pod IPs (for 2 frontend pods)
+#
+# 5. Test from outside:
+#    curl http://[EXTERNAL-IP]
+#    Should return HTML of your Next.js app
+#
+# COMPARING WITH LOCAL DEVELOPMENT:
+#
+# Local (docker-compose):
+#   - Access: http://localhost:3000
+#   - Only you can access
+#   - No load balancing
+#   - No high availability
+#
+# Kubernetes (production):
+#   - Access: http://[public-ip]
+#   - Anyone can access
+#   - Load balanced across 2 pods
+#   - High availability
+#   - Auto-restart if crash
+#   - Professional deployment!
+#
+# ============================================================================

@@ -1,0 +1,313 @@
+# ============================================================================
+# backend-deployment.yaml - Backend Deployment Configuration
+# ============================================================================
+#
+# This file tells Kubernetes how to run your FastAPI backend application.
+# It creates a Deployment resource that manages backend pods.
+#
+# What this file does:
+#   - Pulls backend image from Azure Container Registry
+#   - Runs 2 replicas (pods) for high availability
+#   - Sets resource limits (CPU and memory)
+#   - Configures environment variables (Azure connection string)
+#   - Ensures pods restart if they crash
+#
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# API Version and Kind
+# ----------------------------------------------------------------------------
+# These define what type of Kubernetes resource this is
+
+# apiVersion: Which version of the Kubernetes API to use
+# apps/v1 is the stable API version for Deployments
+# This has been stable since Kubernetes 1.9
+apiVersion: apps/v1
+
+# kind: What type of resource this is
+# Deployment = manages a set of identical pods
+# Other kinds: Service, Pod, ConfigMap, Secret, etc.
+kind: Deployment
+
+# ----------------------------------------------------------------------------
+# Metadata
+# ----------------------------------------------------------------------------
+# Information about this Deployment resource
+
+metadata:
+  # name: Unique name for this Deployment
+  # You'll use this name to reference this Deployment in kubectl commands
+  # Example: kubectl get deployment backend
+  name: backend
+  
+  # labels: Key-value pairs for organizing resources
+  # Labels help you:
+  #   - Filter resources (kubectl get deployments -l app=backend)
+  #   - Organize resources by app, environment, version, etc.
+  #   - Group related resources together
+  labels:
+    app: backend              # This is a backend application
+    tier: api                 # This is the API tier (not frontend)
+    version: v1               # Version 1 of the backend
+    environment: production   # Production environment
+
+# ----------------------------------------------------------------------------
+# Spec (Specification)
+# ----------------------------------------------------------------------------
+# This section defines what you want
+
+spec:
+  # replicas: How many pods (copies) to run
+  # 2 replicas means:
+  #   - High availability (if one crashes, the other handles requests)
+  #   - Load balancing (traffic split between both)
+  #   - Can handle 2× the traffic
+  # 
+  # You can change this to:
+  #   - 1 = Single pod (cheaper, no redundancy)
+  #   - 3 = More redundancy (more expensive)
+  #   - 5 = Even more capacity (even more expensive)
+  replicas: 2
+  
+  # selector: How to identify which pods belong to this Deployment
+  # Deployment will manage all pods that match these labels
+  selector:
+    # matchLabels: Pods must have ALL of these labels
+    # This creates the connection: Deployment → Pods
+    matchLabels:
+      app: backend
+      tier: api
+  
+  # template: The blueprint for creating pods
+  # Every pod created by this Deployment will follow this template
+  template:
+    # metadata for the pods that will be created
+    metadata:
+      # labels: Tags attached to each pod
+      # MUST match the selector above!
+      # These labels allow:
+      #   - Deployment to find its pods
+      #   - Service to route traffic to these pods
+      #   - You to filter pods: kubectl get pods -l app=backend
+      labels:
+        app: backend
+        tier: api
+        version: v1
+    
+    # spec: How to configure each pod
+    spec:
+      # containers: List of containers in the pod
+      # Usually just one container per pod (best practice)
+      containers:
+      # First (and only) container
+      - name: backend
+        # Docker image to use
+        # Format: registry/repository:tag
+        # qrappregistry2026.azurecr.io = Your ACR
+        # backend = Repository name (from your CI/CD)
+        # latest = Tag (always use the latest built image)
+        # 
+        # Alternative: Use specific tag for version control
+        #   backend:v1.0.0
+        #   backend:abc123 (git commit hash)
+        image: qrappregistry2026.azurecr.io/backend:latest
+        
+        # imagePullPolicy: When to pull the image
+        # Always = Pull image every time pod starts (ensures latest)
+        # IfNotPresent = Only pull if not already on node
+        # Never = Never pull, use local image only
+        # 
+        # "Always" is recommended for :latest tag
+        # For specific version tags (v1.0.0), use IfNotPresent
+        imagePullPolicy: Always
+        
+        # ports: Which ports the container exposes
+        # This is informational AND functional
+        # Your FastAPI app listens on port 8000
+        ports:
+        - name: http
+          # containerPort: Port inside the container
+          # Must match the port your FastAPI app uses (8000)
+          containerPort: 8000
+          # protocol: TCP (default) or UDP
+          protocol: TCP
+        
+        # env: Environment variables for the container
+        # These are injected when the container starts
+        # Your FastAPI app needs the Azure connection string
+        env:
+          - name: AZURE_STORAGE_CONNECTION_STRING
+            valueFrom:
+              secretKeyRef:
+              name: azure-storage-secret
+              key: connection-string
+  # Create the secret before deploying:
+  # kubectl create secret generic azure-storage-secret \
+  #   --from-literal=connection-string="YOUR_ACTUAL_CONNECTION_STRING"
+        
+        # Environment variable name
+      
+        
+        # Another environment variable (optional)
+        # You can add more environment variables as needed
+        # Example:
+        # - name: CONTAINER_NAME
+        #   value: "qr-codes"
+        # - name: LOG_LEVEL
+        #   value: "info"
+        
+        # resources: CPU and memory limits
+        # VERY IMPORTANT for:
+        #   - Preventing one pod from using all node resources
+        #   - Kubernetes scheduler knowing where to place pods
+        #   - Cost management
+        resources:
+          # requests: Minimum guaranteed resources
+          # Kubernetes scheduler uses this to decide where to place pod
+          # "This pod needs at least this much to run"
+          requests:
+            # memory: RAM needed
+            # 256Mi = 256 Mebibytes (~268 MB)
+            # Your FastAPI app is lightweight, doesn't need much
+            memory: "256Mi"
+            
+            # cpu: CPU cores needed
+            # 250m = 250 millicores = 0.25 CPU cores = 25% of one core
+            # Your backend is not CPU-intensive
+            cpu: "250m"
+          
+          # limits: Maximum allowed resources
+          # Pod will be throttled (CPU) or killed (memory) if it exceeds limits
+          # "This pod can use up to this much, but no more"
+          limits:
+            # memory: Maximum RAM
+            # 512Mi = 512 Mebibytes (~537 MB)
+            # Pod will be killed if it uses more (OOMKilled)
+            memory: "512Mi"
+            
+            # cpu: Maximum CPU
+            # 500m = 500 millicores = 0.5 CPU cores = 50% of one core
+            # Pod will be throttled if it tries to use more
+            cpu: "500m"
+        
+        # livenessProbe: Health check to detect if container is alive
+        # If this fails, Kubernetes will restart the container
+        # "Is the application still running?"
+        livenessProbe:
+          # httpGet: Check by making HTTP request
+          httpGet:
+            # path: Endpoint to check
+            # Your FastAPI app has a root endpoint that returns status
+            path: /
+            # port: Port to check (must match containerPort)
+            port: 8000
+          
+          # initialDelaySeconds: Wait this long before first check
+          # Gives the app time to start up
+          # 30 seconds is usually enough for FastAPI
+          initialDelaySeconds: 30
+          
+          # periodSeconds: How often to check
+          # Check every 10 seconds
+          periodSeconds: 10
+          
+          # timeoutSeconds: How long to wait for response
+          # If no response in 5 seconds, consider it failed
+          timeoutSeconds: 5
+          
+          # failureThreshold: How many failures before restart
+          # 3 consecutive failures → restart container
+          failureThreshold: 3
+        
+        # readinessProbe: Health check to detect if container is ready for traffic
+        # If this fails, pod is removed from Service (no traffic sent to it)
+        # "Is the application ready to handle requests?"
+        # 
+        # Difference from livenessProbe:
+        #   - livenessProbe: Is it alive? (restart if not)
+        #   - readinessProbe: Is it ready? (don't send traffic if not)
+        readinessProbe:
+          httpGet:
+            # path: Same endpoint as liveness
+            # Could be different (e.g., /health/ready)
+            path: /
+            port: 8000
+          
+          # initialDelaySeconds: Wait before first check
+          # Can be shorter than liveness (10 seconds)
+          initialDelaySeconds: 10
+          
+          # periodSeconds: Check every 5 seconds
+          periodSeconds: 5
+          
+          # timeoutSeconds: 3 seconds to respond
+          timeoutSeconds: 3
+          
+          # failureThreshold: 3 failures → mark as not ready
+          failureThreshold: 3
+
+# ============================================================================
+# END OF backend-deployment.yaml
+# ============================================================================
+#
+# WHAT THIS FILE CREATES:
+#
+# 1. Deployment resource named "backend"
+#    - Manages 2 backend pods
+#    - Ensures 2 pods are always running
+#    - Automatically restarts crashed pods
+#
+# 2. Each pod contains:
+#    - 1 container running FastAPI
+#    - Image from ACR: qrappregistry2026.azurecr.io/backend:latest
+#    - Listens on port 8000
+#    - Has Azure connection string in environment
+#    - Resource limits: 512Mi memory, 500m CPU
+#    - Health checks to ensure it's working
+#
+# HOW TO USE THIS FILE:
+#
+# 1. Replace YOUR_KEY_HERE with your actual Azure Storage Account Key
+#    Get it from: api/.env file or Azure Portal
+#
+# 2. Apply to Kubernetes:
+#    kubectl apply -f backend-deployment.yaml
+#
+# 3. Verify pods are created:
+#    kubectl get pods -l app=backend
+#
+# 4. Check pod logs:
+#    kubectl logs -l app=backend
+#
+# 5. Describe pod for details:
+#    kubectl describe pod <pod-name>
+#
+# EXPECTED RESULT:
+#
+#   kubectl get pods
+#   NAME                       READY   STATUS    RESTARTS   AGE
+#   backend-7d9f8c5b4d-abc12   1/1     Running   0          2m
+#   backend-7d9f8c5b4d-xyz34   1/1     Running   0          2m
+#
+# STATUS should be "Running" and READY should be "1/1"
+#
+# TROUBLESHOOTING:
+#
+# If pods are not running:
+#   kubectl describe pod <pod-name>
+#   kubectl logs <pod-name>
+#
+# Common issues:
+#   - ImagePullBackOff: Can't pull image from ACR (check ACR integration)
+#   - CrashLoopBackOff: Container keeps crashing (check logs)
+#   - Pending: Can't schedule pod (not enough resources on node)
+#   - OOMKilled: Used too much memory (increase memory limit)
+#
+# COST IMPACT:
+#
+# 2 backend pods × 512Mi memory × 500m CPU:
+#   - Uses about 1Gi memory and 1 CPU total
+#   - On Standard_B2s node (4Gi RAM, 2 vCPU): ~25% of node capacity
+#   - Leaves room for frontend pods
+#
+# ============================================================================

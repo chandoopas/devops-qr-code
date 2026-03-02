@@ -1,4 +1,65 @@
-.venv/
-*.tfstate*
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Kubernetes secrets (if any)
+*secret*.yaml
+*-secret.yaml
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# API keys and credentials
+**/api/.env
+**/.azure/
+credentials.json
+service-principal.json
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
-.obsidian/
+Thumbs.db
+
+# Node modules
+node_modules/
+.next/
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+baseline*.txt

@@ -1,0 +1,16 @@
+# Create example file
+cat > terraform/terraform.tfvars.example << 'EOF'
+# terraform.tfvars.example
+# Copy this file to terraform.tfvars and fill in your actual values
+
+resource_group_name = "qr-code-k8s-rg"
+location = "eastus"
+cluster_name = "qr-code-aks-cluster"
+dns_prefix = "qr-code-k8s"
+node_count = 1
+node_vm_size = "Standard_B2s"
+acr_name = "qrappregistry2026"
+acr_resource_group = "qr-code-project-rg"
+
+# NOTE: This is a template. Do NOT commit terraform.tfvars with real values!
+# The actual terraform.tfvars is in .gitignore

@@ -1,0 +1,290 @@
+# ============================================================================
+# backend-service.yaml - Backend Service Configuration
+# ============================================================================
+#
+# This file creates a Service for the backend pods.
+# A Service provides a stable network endpoint for accessing pods.
+#
+# What this file does:
+#   - Creates internal DNS name "backend" for backend pods
+#   - Load balances requests across all backend pods
+#   - Provides stable endpoint (even as pods are created/destroyed)
+#   - Only accessible within the Kubernetes cluster (not from internet)
+#
+# Think of it as: An internal phone number that routes calls to any available
+# backend pod. When frontend calls "backend:8000", the Service routes it to
+# one of the healthy backend pods.
+#
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# API Version and Kind
+# ----------------------------------------------------------------------------
+
+# apiVersion: Which version of the Kubernetes API to use
+# v1 is the core/stable API version for Services
+apiVersion: v1
+
+# kind: What type of resource this is
+# Service = provides networking and load balancing for pods
+kind: Service
+
+# ----------------------------------------------------------------------------
+# Metadata
+# ----------------------------------------------------------------------------
+# Information about this Service
+
+metadata:
+  # name: Name of the Service
+  # IMPORTANT: This becomes the DNS name!
+  # Pods can access this service at: http://backend:8000
+  # The name "backend" creates DNS entry "backend.default.svc.cluster.local"
+  # But you can just use "backend" within the same namespace
+  name: backend
+  
+  # labels: For organizing services
+  # Same pattern as Deployment labels
+  labels:
+    app: backend
+    tier: api
+    version: v1
+
+# ----------------------------------------------------------------------------
+# Spec (Specification)
+# ----------------------------------------------------------------------------
+# This section defines how the Service works
+
+spec:
+  # type: What kind of Service
+  # ClusterIP = Internal only (default)
+  #   - Gets internal IP address
+  #   - Only accessible within Kubernetes cluster
+  #   - Perfect for backend (frontend-to-backend communication)
+  #   - No external/public IP
+  # 
+  # Other types:
+  #   - NodePort: Exposes on each node's IP at a static port
+  #   - LoadBalancer: Gets public IP from cloud provider (for frontend)
+  #   - ExternalName: Maps to external DNS name
+  # 
+  # For backend, we use ClusterIP because:
+  #   - Backend should not be directly accessible from internet
+  #   - Only frontend needs to call backend
+  #   - More secure
+  #   - No extra cost (no public IP)
+  type: ClusterIP
+  
+  # selector: How to find the pods this Service routes to
+  # Service will send traffic to ALL pods matching these labels
+  # MUST match the labels in backend-deployment.yaml
+  # 
+  # This creates the connection: Service → Pods
+  selector:
+    app: backend
+    tier: api
+  
+  # ports: Port configuration
+  # Defines how traffic is routed
+  ports:
+  # You can have multiple ports, but backend only needs one
+  - name: http
+    # protocol: TCP or UDP
+    # HTTP uses TCP
+    protocol: TCP
+    
+    # port: The port this Service listens on
+    # Other pods will connect to: backend:8000
+    # This is the "external" port (from Service perspective)
+    port: 8000
+    
+    # targetPort: The port on the pod containers
+    # Must match containerPort in backend-deployment.yaml (8000)
+    # Service forwards traffic from port 8000 → targetPort 8000
+    # 
+    # These can be different! Example:
+    #   port: 80 (Service listens on 80)
+    #   targetPort: 8000 (forwards to pod's 8000)
+    #   Then: http://backend:80 → pod's 8000
+    # 
+    # For simplicity, we use 8000 for both
+    targetPort: 8000
+  
+  # sessionAffinity: How to handle repeat requests from same client
+  # None = Load balance every request (default)
+  # ClientIP = Same client always goes to same pod (sticky sessions)
+  # 
+  # For stateless APIs like yours, use "None"
+  # If your backend stored session data in memory, use "ClientIP"
+  sessionAffinity: None
+
+# ============================================================================
+# END OF backend-service.yaml
+# ============================================================================
+#
+# WHAT THIS FILE CREATES:
+#
+# 1. Service resource named "backend"
+#    - Type: ClusterIP (internal only)
+#    - Listens on port 8000
+#    - Routes to backend pods on port 8000
+#
+# 2. DNS entry created automatically:
+#    - Short name: backend
+#    - Full name: backend.default.svc.cluster.local
+#    - Other pods can call: http://backend:8000
+#
+# 3. Load balancing:
+#    - Distributes requests across all healthy backend pods
+#    - If one pod is down, traffic goes to others
+#    - Round-robin by default
+#
+# HOW THIS WORKS:
+#
+# 1. Service is created with selector: app=backend, tier=api
+# 2. Service finds all pods with matching labels (2 backend pods)
+# 3. Service creates endpoints list (IP addresses of pods)
+# 4. When request comes to "backend:8000":
+#    a. Service picks one pod (load balancing)
+#    b. Routes traffic to that pod's IP:8000
+# 5. If pod dies:
+#    a. Service automatically removes it from endpoints
+#    b. Traffic only goes to healthy pods
+# 6. When new pod starts:
+#    a. Service automatically adds it to endpoints
+#    b. Starts receiving traffic
+#
+# HOW TO USE THIS FILE:
+#
+# 1. Apply to Kubernetes:
+#    kubectl apply -f backend-service.yaml
+#
+# 2. Verify Service is created:
+#    kubectl get service backend
+#
+# 3. Get detailed info:
+#    kubectl describe service backend
+#
+# 4. Check endpoints (pod IPs):
+#    kubectl get endpoints backend
+#
+# 5. Test from inside cluster:
+#    kubectl run test --image=curlimages/curl -it --rm -- curl http://backend:8000
+#
+# EXPECTED RESULT:
+#
+#   kubectl get service backend
+#   NAME      TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+#   backend   ClusterIP   10.0.123.45    <none>        8000/TCP   1m
+#
+# CLUSTER-IP: Internal IP address (only accessible within cluster)
+# EXTERNAL-IP: <none> (because type is ClusterIP, not LoadBalancer)
+# PORT(S): 8000/TCP (Service port)
+#
+# TESTING THE SERVICE:
+#
+# From within the cluster (e.g., from frontend pod):
+#   curl http://backend:8000/
+#   curl http://backend:8000/health
+#   curl http://backend:8000/generate -X POST -H "Content-Type: application/json" -d '{"url":"https://example.com"}'
+#
+# From outside cluster:
+#   NOT ACCESSIBLE - This is intentional for security
+#   Backend should only be accessed by frontend
+#
+# VERIFICATION COMMANDS:
+#
+# 1. Check Service exists:
+#    kubectl get svc backend
+#
+# 2. See which pods Service is routing to:
+#    kubectl get endpoints backend
+#    Should show 2 IP addresses (one for each backend pod)
+#
+# 3. Describe Service:
+#    kubectl describe svc backend
+#    Look for:
+#      - Type: ClusterIP
+#      - IP: [some internal IP]
+#      - Port: 8000/TCP
+#      - Endpoints: [list of pod IPs]
+#
+# 4. Test DNS resolution:
+#    kubectl run test --image=busybox -it --rm -- nslookup backend
+#    Should resolve to Service's ClusterIP
+#
+# HOW FRONTEND USES THIS:
+#
+# In frontend-deployment.yaml, we set:
+#   env:
+#     - name: NEXT_PUBLIC_API_URL
+#       value: "http://backend:8000"
+#
+# When frontend makes request:
+#   fetch('http://backend:8000/generate', ...)
+#
+# What happens:
+#   1. DNS resolves "backend" to Service ClusterIP
+#   2. Request goes to Service
+#   3. Service picks one backend pod
+#   4. Request forwarded to pod
+#   5. Pod processes request
+#   6. Response sent back through Service to frontend
+#
+# LOAD BALANCING EXAMPLE:
+#
+# With 2 backend pods:
+#   Request 1: backend:8000 → Pod 1 (10.0.1.5:8000)
+#   Request 2: backend:8000 → Pod 2 (10.0.1.6:8000)
+#   Request 3: backend:8000 → Pod 1 (10.0.1.5:8000)
+#   Request 4: backend:8000 → Pod 2 (10.0.1.6:8000)
+#
+# Traffic is distributed evenly
+#
+# If Pod 1 crashes:
+#   All traffic goes to Pod 2
+#   Pod 1 automatically removed from endpoints
+#
+# When Pod 1 comes back:
+#   Automatically added back to endpoints
+#   Starts receiving traffic again
+#
+# TROUBLESHOOTING:
+#
+# Issue: "Service has no endpoints"
+#   Cause: No pods match the selector
+#   Fix: Check pod labels match Service selector
+#   kubectl get pods --show-labels
+#   kubectl describe svc backend (check Endpoints section)
+#
+# Issue: "Connection refused"
+#   Cause: Pod not listening on targetPort
+#   Fix: Check container logs
+#   kubectl logs -l app=backend
+#   Verify FastAPI is listening on 8000
+#
+# Issue: "DNS not resolving"
+#   Cause: CoreDNS issues
+#   Fix: Check CoreDNS pods
+#   kubectl get pods -n kube-system -l k8s-app=kube-dns
+#
+# COST IMPACT:
+#
+# Services are FREE!
+#   - No additional cost for ClusterIP Service
+#   - Only LoadBalancer Services cost money (public IP)
+#   - This backend Service: $0.00
+#
+# SECURITY:
+#
+# ClusterIP Services are secure:
+#   ✅ Not accessible from internet
+#   ✅ Only accessible within cluster
+#   ✅ No public IP
+#   ✅ Network policies can further restrict access
+#
+# For production, consider:
+#   - Network Policies (restrict which pods can call backend)
+#   - Service Mesh (Istio/Linkerd for mTLS)
+#   - API Gateway for external access
+#
+# ============================================================================
